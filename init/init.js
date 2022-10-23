@@ -27,14 +27,6 @@ db.products.insertMany([
 
 db.freezers.createIndex({"_id": 1, "products.product_id": 1}, {unique: true})
 
-getProduct = function (name) {
-    return db.products.findOne({"_id": name})
-}
-
-getProductId = function (name) {
-    return getProduct(name)._id
-}
-
 db.freezers.insertMany([
     {
         "_id": "ATLANT М 7184-003",
