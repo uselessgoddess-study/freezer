@@ -17,6 +17,21 @@ services:
 #    ports:
 #      - '9000:9000'
 
+#  postgres:
+#    image: postgres
+#    environment:
+#      POSTGRES_DB: "freezers"
+#      POSTGRES_USER: "admin"
+#      POSTGRES_PASSWORD: "password"
+#    ports:
+#      - '5432:5432'
+
+#  adminer:
+#    image: adminer
+#    restart: always
+#    ports:
+#      - '25432:25432'
+
   mongodb:
     image: mongo:5
     container_name: mongodb

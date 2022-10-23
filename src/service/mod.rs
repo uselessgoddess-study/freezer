@@ -1,3 +1,7 @@
+mod mongo;
 mod redis;
 
-pub use self::redis::ImageStore;
+pub use self::{
+    mongo::{FreezersStore, ProductsStore},
+    redis::ImageStore,
+};

@@ -1,13 +1,11 @@
-use crate::utils::redis::Client;
+use bytes::Bytes;
 use format_bytes::format_bytes;
-use mongodb::bson::oid::ObjectId;
-use redis::{AsyncCommands, Commands, RedisResult};
+use redis::{aio::Connection, AsyncCommands, Commands, RedisResult};
 
-#[derive(Clone)]
-pub struct ImageStore(Client);
+pub struct ImageStore(Connection);
 
 impl ImageStore {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Connection) -> Self {
         Self(client)
     }
 
@@ -15,11 +13,11 @@ impl ImageStore {
         format_bytes!(b"freezers:{}:image", key)
     }
 
-    pub async fn image(&self, uuid: &[u8]) -> RedisResult<Vec<u8>> {
-        self.0.clone().get(uuid).await
+    pub async fn image(&mut self, uuid: &[u8]) -> RedisResult<Bytes> {
+        self.0.get(uuid).await
     }
 
-    pub async fn load_image(&self, uuid: &[u8], bytes: &[u8]) -> RedisResult<Vec<u8>> {
-        self.0.clone().set(uuid, bytes).await
+    pub async fn load_image(&mut self, uuid: &[u8], bytes: &[u8]) -> RedisResult<Bytes> {
+        self.0.set(uuid, bytes).await
     }
 }

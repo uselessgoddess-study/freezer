@@ -1,65 +1,33 @@
+#![feature(specialization)]
+#![feature(decl_macro)]
+#![deny(clippy::all, clippy::perf)]
+
+mod errors;
+mod handlers;
 mod model;
 mod service;
 mod utils;
 
-use crate::service::ImageStore;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use anyhow::Result;
+pub(crate) use errors::Result;
+
+use crate::service::{FreezersStore, ImageStore, ProductsStore};
+use actix_web::{web, App, HttpServer};
+use async_std::sync::Mutex;
 use futures::{StreamExt, TryStreamExt};
-use json::json;
-use redis::{AsyncCommands, Commands};
-use std::sync::Arc;
-use std::{env, io};
+
+use mongodb::bson::oid::ObjectId;
+use std::env;
 use tap::Pipe;
-use tracing::{info, trace};
+use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 
-#[get("/api/products")]
-async fn products() -> impl Responder {
-    json!({
-        "freezers": "/api/products/freezers",
-        // ...
-    })
-    .pipe(web::Json)
-}
-
-#[post("/api/load_images/{key}/{value}")]
-async fn foo(
-    mut redis: web::Data<ImageStore>,
-    path: web::Path<(String, String)>,
-) -> impl Responder {
-    let (user_id, friend) = path.into_inner();
-    redis
-        .load_image(user_id.as_bytes(), friend.as_bytes())
-        .await
-        .unwrap();
-    HttpResponse::Ok()
-}
-
-#[get("/api/images/{key}")]
-async fn bar(
-    mut redis: web::Data<ImageStore>,
-    path: web::Path<(String, String)>,
-) -> impl Responder {
-    let (user_id, friend) = path.into_inner();
-    redis
-        .load_image(user_id.as_bytes(), friend.as_bytes())
-        .await
-        .unwrap();
-    HttpResponse::Ok()
-}
-
-#[post("/api/post")]
-async fn post(body: web::Bytes) -> impl Responder {
-    std::fs::write("file.png", body).unwrap();
-    HttpResponse::Ok()
-}
+use crate::handlers::post;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        // .with_max_level(LevelFilter::TRACE)
-        // .pretty()
+        .with_max_level(LevelFilter::DEBUG)
+        .pretty()
         .init();
     dotenv::from_filename(".env.local").ok();
 
@@ -71,20 +39,38 @@ async fn main() -> Result<()> {
     // let mongodb_client = MongoDbClient::new(mongodb_uri).await;
 
     let redis = redis::Client::open(redis)?.get_async_connection().await?;
-    let images = ImageStore::new(redis).pipe(web::Data::new);
+    let images = ImageStore::new(redis).pipe(Mutex::new).pipe(web::Data::new);
 
-    let client = mongodb::Client::with_uri_str(mongo).await?;
+    let mongo = mongodb::Client::with_uri_str(mongo).await?;
+
+    let freezers =
+        FreezersStore::new(mongo.database("admin").collection("freezers")).pipe(web::Data::new);
+
+    let products =
+        ProductsStore::new(mongo.database("admin").collection("products")).pipe(web::Data::new);
 
     info!("bind to: http://localhost:8080");
 
+    let x = json::to_value(ObjectId::new()).unwrap();
+    println!("{x}");
+    let y: ObjectId = json::from_value(x).unwrap();
+    println!("{y}");
+
+    let x = json::json!(y);
+
     HttpServer::new(move || {
         App::new()
-            .service(products)
             .service(post)
-            .service(foo)
-            .service(bar)
+            .service(handlers::freezers)
+            .service(handlers::products)
+            .service(handlers::one_product)
+            .service(handlers::put_in)
+            .service(handlers::put_out)
+            .service(handlers::remove_product)
             .app_data(web::PayloadConfig::new(16_777_216)) // 16 MB
             .app_data(images.clone())
+            .app_data(freezers.clone())
+            .app_data(products.clone())
     })
     .bind(("127.0.0.1", 8080))?
     .run()
