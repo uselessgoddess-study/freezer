@@ -2,7 +2,7 @@ use crate::{
     errors::{not_found, Error},
     FreezersStore, ImageStore, ProductsStore, Result,
 };
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{delete, get, http::header::ContentType, post, web, HttpResponse, Responder};
 use async_std::sync::Mutex;
 use futures::StreamExt;
 use mongodb::bson::oid::ObjectId;
@@ -104,30 +104,74 @@ pub async fn freezers(store: web::Data<FreezersStore>) -> Result<impl Responder>
         .pipe(web::Json))
 }
 
+#[get("/api/freezers/{freezer}")]
+pub async fn one_freezer(
+    freezer: web::Path<String>,
+    store: web::Data<FreezersStore>,
+) -> Result<impl Responder> {
+    let id = freezer.into_inner();
+    store.freezer(&id).await.map(web::Json)
+}
+
 #[post("/api/load_images/{key}/{value}")]
 pub async fn load_image(
-    redis: web::Data<Mutex<ImageStore>>,
     path: web::Path<(String, String)>,
+    redis: web::Data<Mutex<ImageStore>>,
 ) -> impl Responder {
     let (user_id, friend) = path.into_inner();
     redis
         .lock()
         .await
-        .load_image(user_id.as_bytes(), friend.as_bytes())
+        .load(user_id.as_bytes(), friend.as_bytes())
         .await
         .unwrap();
     HttpResponse::Ok()
 }
 
-#[get("/api/images/{key}")]
-pub async fn get_image(
-    redis: web::Data<Mutex<ImageStore>>,
-    path: web::Path<(String,)>,
-) -> impl Responder {
-    let (user_id,) = path.into_inner();
-    let x = redis.lock().await.image(user_id.as_bytes()).await.unwrap();
-    println!("{x:?}");
-    HttpResponse::Ok()
+#[get("/api/freezers/{freezer}/image")]
+pub async fn image(
+    freezer: web::Path<String>,
+    store: web::Data<Mutex<ImageStore>>,
+) -> Result<impl Responder> {
+    let id = freezer.into_inner();
+
+    const DEV_LOGO: &[u8] = include_bytes!("../embedded/logo.jpg");
+
+    let raw = store
+        .lock()
+        .await
+        .image(id.as_bytes())
+        .await?
+        .unwrap_or(DEV_LOGO.into());
+
+    Ok(HttpResponse::Ok()
+        .content_type(ContentType::jpeg())
+        .body(raw))
+}
+
+#[post("/api/freezers/{freezer}/image")]
+pub async fn post_image(
+    img: web::Bytes,
+    freezer: web::Path<String>,
+    store: web::Data<Mutex<ImageStore>>,
+) -> Result<impl Responder> {
+    let id = freezer.into_inner();
+
+    let _ = store.lock().await.load(id.as_bytes(), &img).await?;
+
+    Ok(HttpResponse::Ok())
+}
+
+#[delete("/api/freezers/{freezer}/image")]
+pub async fn remove_image(
+    freezer: web::Path<String>,
+    store: web::Data<Mutex<ImageStore>>,
+) -> Result<impl Responder> {
+    let id = freezer.into_inner();
+
+    let _ = store.lock().await.remove(id.as_bytes()).await?;
+
+    Ok(HttpResponse::Ok())
 }
 
 #[post("/api/post")]

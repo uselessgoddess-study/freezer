@@ -1,7 +1,10 @@
 #![feature(specialization)]
 #![feature(decl_macro)]
+#![feature(poll_ready)]
+#![feature(try_blocks)]
 #![deny(clippy::all, clippy::perf)]
 
+mod auth;
 mod errors;
 mod handlers;
 mod model;
@@ -11,11 +14,16 @@ mod utils;
 pub(crate) use errors::Result;
 
 use crate::service::{FreezersStore, ImageStore, ProductsStore};
-use actix_web::{web, App, HttpServer};
+use actix_web::{guard, web, App, HttpResponse, HttpServer};
 use async_std::sync::Mutex;
 use futures::{StreamExt, TryStreamExt};
 
+use actix_identity::IdentityMiddleware;
+use actix_session::{storage::CookieSessionStore, SessionMiddleware};
+use actix_web::cookie::Key;
+use actix_web_httpauth::middleware::HttpAuthentication;
 use mongodb::bson::oid::ObjectId;
+use redis::AsyncCommands;
 use std::env;
 use tap::Pipe;
 use tracing::info;
@@ -51,23 +59,36 @@ async fn main() -> Result<()> {
 
     info!("bind to: http://localhost:8080");
 
-    let x = json::to_value(ObjectId::new()).unwrap();
-    println!("{x}");
-    let y: ObjectId = json::from_value(x).unwrap();
-    println!("{y}");
-
-    let x = json::json!(y);
-
     HttpServer::new(move || {
         App::new()
+            .wrap(IdentityMiddleware::default())
+            .wrap(SessionMiddleware::new(
+                CookieSessionStore::default(),
+                Key::from(auth::SECRET),
+            ))
+            .service(
+                web::resource("/guarded").route(
+                    web::route()
+                        .guard(guard::Any(guard::Get()).or(guard::Post()))
+                        .guard()
+                        .to(|| HttpResponse::Ok()),
+                ),
+            )
             .service(post)
             .service(handlers::freezers)
+            .service(handlers::one_freezer)
+            //
             .service(handlers::products)
             .service(handlers::one_product)
             .service(handlers::put_in)
             .service(handlers::put_out)
             .service(handlers::remove_product)
-            .app_data(web::PayloadConfig::new(16_777_216)) // 16 MB
+            //
+            .service(handlers::image)
+            .service(handlers::post_image)
+            .service(handlers::remove_image)
+            //
+            .app_data(web::PayloadConfig::new(16_777_216)) // 16 MB payload
             .app_data(images.clone())
             .app_data(freezers.clone())
             .app_data(products.clone())
