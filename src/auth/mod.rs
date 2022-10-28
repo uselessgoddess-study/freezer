@@ -1,24 +1,18 @@
 mod handlers;
-mod role;
 
 pub use handlers::{login, logout, me};
-pub use role::Role;
 
 use crate::errors::{Error, Result};
 use actix_identity::Identity;
 use actix_web::{
-    dev::{Payload, ServiceRequest}, FromRequest, HttpRequest,
+    dev::{Payload, ServiceRequest},
+    FromRequest, HttpRequest,
 };
-
-
-
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::future::{ready, Ready};
 use tap::Pipe;
 
-
-pub const JWT_EXP: i64 = 24; // 24 hours
 pub const SECRET: &[u8] = r#"
 Bei Nacht im Dorf der Wächter rief:
     Elfe!
@@ -45,6 +39,14 @@ Elfe, gelt, du hast genug?
     Gukuk! Gukuk!
 "#
 .as_bytes();
+
+#[derive(PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[repr(usize)]
+pub enum Role {
+    Admin,
+    Moder,
+    User,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthData {

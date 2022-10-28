@@ -1,5 +1,5 @@
 use crate::{model::Freezer, Result};
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt};
 use mongodb::bson::{doc, Document};
 
 use crate::{
@@ -84,6 +84,4 @@ impl FreezersStore {
         )
         .await
     }
-
-    pub async fn push_products(&self, _name: &str) {}
 }

@@ -1,4 +1,3 @@
-#![feature(specialization)]
 #![feature(decl_macro)]
 #![feature(poll_ready)]
 #![feature(try_blocks)]
@@ -16,14 +15,11 @@ pub(crate) use errors::Result;
 use crate::service::{FreezersStore, ImageStore, ProductsStore};
 use actix_web::{web, App, HttpServer};
 use async_std::sync::Mutex;
-use futures::{StreamExt, TryStreamExt};
 
 use actix_identity::IdentityMiddleware;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::cookie::Key;
 use actix_web_grants::GrantsMiddleware;
-
-
 
 use std::env;
 use tap::Pipe;
@@ -43,15 +39,10 @@ async fn main() -> Result<()> {
 
     info!(mongo, redis, "db envs:");
 
-    // let mongodb_client = MongoDbClient::new(mongodb_uri).await;
-
     let redis = redis::Client::open(redis)?;
     let images = ImageStore::new(redis.get_async_connection().await?)
         .pipe(Mutex::new)
         .pipe(web::Data::new);
-    // let roles = RoleStore::new(redis.get_async_connection().await?)
-    //     .pipe(Mutex::new)
-    //     .pipe(web::Data::new);
 
     let mongo = mongodb::Client::with_uri_str(mongo).await?;
 
@@ -93,7 +84,6 @@ async fn main() -> Result<()> {
             //
             .app_data(web::PayloadConfig::new(16_777_216)) // 16 MB payload
             .app_data(images.clone())
-            // .app_data(roles.clone())
             .app_data(freezers.clone())
             .app_data(products.clone())
     })

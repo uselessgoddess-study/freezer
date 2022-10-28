@@ -1,18 +1,13 @@
-use crate::{
-    auth::Role,
-    errors::{not_found},
-    FreezersStore, ImageStore, ProductsStore, Result,
-};
+use crate::{auth::Role, errors::not_found, FreezersStore, ImageStore, ProductsStore, Result};
 use actix_web::{delete, get, http::header::ContentType, post, web, HttpResponse, Responder};
 use async_std::sync::Mutex;
 use futures::StreamExt;
 
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 mod grants {
     pub use actix_web_grants::proc_macro::has_any_role as any;
 }
-
 
 use tap::{Pipe, Tap};
 
@@ -77,10 +72,6 @@ pub async fn put_out(
     });
 
     Ok(store.update(&id, freezer).await?.pipe(web::Json))
-}
-
-struct RemoveReq {
-    pattern: Option<String>,
 }
 
 #[post("/api/freezers/{freezer}/remove")]
