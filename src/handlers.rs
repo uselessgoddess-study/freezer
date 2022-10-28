@@ -1,14 +1,19 @@
 use crate::{
-    errors::{not_found, Error},
+    auth::Role,
+    errors::{not_found},
     FreezersStore, ImageStore, ProductsStore, Result,
 };
 use actix_web::{delete, get, http::header::ContentType, post, web, HttpResponse, Responder};
 use async_std::sync::Mutex;
 use futures::StreamExt;
-use mongodb::bson::oid::ObjectId;
-use std::{borrow::Borrow, collections::HashMap, str::FromStr};
 
-use crate::model::Product;
+use std::{collections::HashMap};
+
+mod grants {
+    pub use actix_web_grants::proc_macro::has_any_role as any;
+}
+
+
 use tap::{Pipe, Tap};
 
 #[get("/api/products")]
@@ -33,13 +38,14 @@ pub async fn one_product(
 }
 
 #[post("/api/freezers/{freezer}/put-in")]
+#[grants::any(type = "Role", "Role::Moder")]
 pub async fn put_in(
     freezer: web::Path<String>,
     web::Json(prods): web::Json<HashMap<String, usize>>,
     store: web::Data<FreezersStore>,
 ) -> Result<impl Responder> {
     let id = freezer.into_inner();
-    let mut freezer = store.freezer(&id).await?.tap_mut(|freezer| {
+    let freezer = store.freezer(&id).await?.tap_mut(|freezer| {
         for (product, count) in prods {
             freezer
                 .products
@@ -55,13 +61,14 @@ pub async fn put_in(
 }
 
 #[post("/api/freezers/{freezer}/put-out")]
+#[grants::any(type = "Role", "Role::Moder")]
 pub async fn put_out(
     freezer: web::Path<String>,
     web::Json(prods): web::Json<HashMap<String, usize>>,
     store: web::Data<FreezersStore>,
 ) -> Result<impl Responder> {
     let id = freezer.into_inner();
-    let mut freezer = store.freezer(&id).await?.tap_mut(|freezer| {
+    let freezer = store.freezer(&id).await?.tap_mut(|freezer| {
         for (product, count) in prods {
             freezer.products.entry(product).and_modify(|entry| {
                 *entry -= count;
@@ -77,6 +84,7 @@ struct RemoveReq {
 }
 
 #[post("/api/freezers/{freezer}/remove")]
+#[grants::any(type = "Role", "Role::Moder")]
 pub async fn remove_product(
     freezer: web::Path<String>,
     product: String,
@@ -113,21 +121,6 @@ pub async fn one_freezer(
     store.freezer(&id).await.map(web::Json)
 }
 
-#[post("/api/load_images/{key}/{value}")]
-pub async fn load_image(
-    path: web::Path<(String, String)>,
-    redis: web::Data<Mutex<ImageStore>>,
-) -> impl Responder {
-    let (user_id, friend) = path.into_inner();
-    redis
-        .lock()
-        .await
-        .load(user_id.as_bytes(), friend.as_bytes())
-        .await
-        .unwrap();
-    HttpResponse::Ok()
-}
-
 #[get("/api/freezers/{freezer}/image")]
 pub async fn image(
     freezer: web::Path<String>,
@@ -142,7 +135,7 @@ pub async fn image(
         .await
         .image(id.as_bytes())
         .await?
-        .unwrap_or(DEV_LOGO.into());
+        .unwrap_or_else(|| DEV_LOGO.into());
 
     Ok(HttpResponse::Ok()
         .content_type(ContentType::jpeg())
@@ -150,6 +143,7 @@ pub async fn image(
 }
 
 #[post("/api/freezers/{freezer}/image")]
+#[grants::any(type = "Role", "Role::Admin")]
 pub async fn post_image(
     img: web::Bytes,
     freezer: web::Path<String>,
@@ -157,25 +151,20 @@ pub async fn post_image(
 ) -> Result<impl Responder> {
     let id = freezer.into_inner();
 
-    let _ = store.lock().await.load(id.as_bytes(), &img).await?;
+    store.lock().await.load(id.as_bytes(), &img).await?;
 
     Ok(HttpResponse::Ok())
 }
 
 #[delete("/api/freezers/{freezer}/image")]
+#[grants::any(type = "Role", "Role::Moder")]
 pub async fn remove_image(
     freezer: web::Path<String>,
     store: web::Data<Mutex<ImageStore>>,
 ) -> Result<impl Responder> {
     let id = freezer.into_inner();
 
-    let _ = store.lock().await.remove(id.as_bytes()).await?;
+    store.lock().await.remove(id.as_bytes()).await?;
 
     Ok(HttpResponse::Ok())
-}
-
-#[post("/api/post")]
-pub async fn post(body: web::Bytes) -> impl Responder {
-    std::fs::write("file.png", body).unwrap();
-    HttpResponse::Ok()
 }

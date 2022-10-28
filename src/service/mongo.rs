@@ -1,6 +1,6 @@
 use crate::{model::Freezer, Result};
 use futures::{Stream, StreamExt, TryStreamExt};
-use mongodb::bson::{doc, oid::ObjectId, Document};
+use mongodb::bson::{doc, Document};
 
 use crate::{
     errors::{not_found, Error},
@@ -29,7 +29,7 @@ impl ProductsStore {
             .await
             .map_err(Into::into)
             .transpose()
-            .unwrap_or(not_found!("{bson}"))
+            .unwrap_or_else(|| not_found!("{bson}"))
     }
 
     pub async fn product(&self, name: &str) -> Result<Product> {
@@ -54,7 +54,7 @@ impl FreezersStore {
             .await
             .map_err(Into::into)
             .transpose()
-            .unwrap_or(not_found!("{bson}"))
+            .unwrap_or_else(|| not_found!("{bson}"))
     }
 
     pub async fn freezer(&self, name: &str) -> Result<Freezer> {
@@ -85,5 +85,5 @@ impl FreezersStore {
         .await
     }
 
-    pub async fn push_products(&self, name: &str) {}
+    pub async fn push_products(&self, _name: &str) {}
 }

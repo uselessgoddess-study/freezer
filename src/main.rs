@@ -14,22 +14,21 @@ mod utils;
 pub(crate) use errors::Result;
 
 use crate::service::{FreezersStore, ImageStore, ProductsStore};
-use actix_web::{guard, web, App, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpServer};
 use async_std::sync::Mutex;
 use futures::{StreamExt, TryStreamExt};
 
 use actix_identity::IdentityMiddleware;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::cookie::Key;
-use actix_web_httpauth::middleware::HttpAuthentication;
-use mongodb::bson::oid::ObjectId;
-use redis::AsyncCommands;
+use actix_web_grants::GrantsMiddleware;
+
+
+
 use std::env;
 use tap::Pipe;
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
-
-use crate::handlers::post;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -46,8 +45,13 @@ async fn main() -> Result<()> {
 
     // let mongodb_client = MongoDbClient::new(mongodb_uri).await;
 
-    let redis = redis::Client::open(redis)?.get_async_connection().await?;
-    let images = ImageStore::new(redis).pipe(Mutex::new).pipe(web::Data::new);
+    let redis = redis::Client::open(redis)?;
+    let images = ImageStore::new(redis.get_async_connection().await?)
+        .pipe(Mutex::new)
+        .pipe(web::Data::new);
+    // let roles = RoleStore::new(redis.get_async_connection().await?)
+    //     .pipe(Mutex::new)
+    //     .pipe(web::Data::new);
 
     let mongo = mongodb::Client::with_uri_str(mongo).await?;
 
@@ -61,20 +65,15 @@ async fn main() -> Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(GrantsMiddleware::with_extractor(auth::extractor))
             .wrap(IdentityMiddleware::default())
-            .wrap(SessionMiddleware::new(
-                CookieSessionStore::default(),
-                Key::from(auth::SECRET),
-            ))
-            .service(
-                web::resource("/guarded").route(
-                    web::route()
-                        .guard(guard::Any(guard::Get()).or(guard::Post()))
-                        .guard()
-                        .to(|| HttpResponse::Ok()),
-                ),
+            .wrap(
+                SessionMiddleware::builder(CookieSessionStore::default(), Key::from(auth::SECRET))
+                    .cookie_name("auth".into())
+                    // .cookie_domain(Some("localhost".into()))
+                    .cookie_secure(false)
+                    .build(),
             )
-            .service(post)
             .service(handlers::freezers)
             .service(handlers::one_freezer)
             //
@@ -88,8 +87,13 @@ async fn main() -> Result<()> {
             .service(handlers::post_image)
             .service(handlers::remove_image)
             //
+            .service(auth::me)
+            .service(auth::login)
+            .service(auth::logout)
+            //
             .app_data(web::PayloadConfig::new(16_777_216)) // 16 MB payload
             .app_data(images.clone())
+            // .app_data(roles.clone())
             .app_data(freezers.clone())
             .app_data(products.clone())
     })

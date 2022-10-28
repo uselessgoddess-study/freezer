@@ -3,5 +3,5 @@ mod redis;
 
 pub use self::{
     mongo::{FreezersStore, ProductsStore},
-    redis::ImageStore,
+    redis::{ImageStore, RoleStore},
 };

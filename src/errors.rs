@@ -1,15 +1,20 @@
 use actix_web::{http::StatusCode, ResponseError};
-use anyhow::anyhow;
 use std::io;
+
+mod anyhow {
+    pub type Error = Box<dyn std::error::Error>;
+
+    pub macro anyhow($($tt:tt)*) {
+        Box::new(format!($($tt)*)) as Error
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("not found: {0}")]
     NotFound(anyhow::Error),
-    #[error("not found: {0}")]
-    LogicError(anyhow::Error),
-    #[error("not found: {0}")]
-    ActixWeb(actix_web::Error),
+    #[error("unauthorized: {0}")]
+    Unauth(anyhow::Error),
     #[error("")]
     TooManyRequests { actual: u64, permitted: u64 },
 
@@ -26,8 +31,7 @@ impl ResponseError for Error {
     fn status_code(&self) -> StatusCode {
         match self {
             Error::NotFound(_) => StatusCode::NOT_FOUND,
-            Error::ActixWeb(err) => err.as_response_error().status_code(),
-            Error::LogicError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Error::Unauth(_) => StatusCode::UNAUTHORIZED,
             Error::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -42,12 +46,16 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<actix_web::Error> for Error {
-    fn from(error: actix_web::Error) -> Self {
+impl From<json::Error> for Error {
+    fn from(error: json::Error) -> Self {
         Self::Internal(error.into())
     }
 }
 
 pub macro not_found($($tt:tt)*) {
-    Err(Error::NotFound(anyhow!($($tt)*)))
+    Err(Error::NotFound(format!($($tt)*).into()))
+}
+
+pub macro unauth($($tt:tt)*) {
+    Err(Error::Unauth(format!($($tt)*).into()))
 }
