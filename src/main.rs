@@ -65,10 +65,10 @@ async fn main() -> Result<()> {
                     .cookie_secure(false)
                     .build(),
             )
-            .service(handlers::freezers)
+            .service(handlers::get_freezers)
             .service(handlers::one_freezer)
             //
-            .service(handlers::products)
+            .service(handlers::get_products)
             .service(handlers::one_product)
             .service(handlers::put_in)
             .service(handlers::put_out)
@@ -81,6 +81,8 @@ async fn main() -> Result<()> {
             .service(auth::me)
             .service(auth::login)
             .service(auth::logout)
+            //
+            .service(handlers::stored_procedure)
             //
             .app_data(web::PayloadConfig::new(16_777_216)) // 16 MB payload
             .app_data(images.clone())

@@ -1,7 +1,7 @@
 use crate::{auth::Role, errors::not_found, FreezersStore, ImageStore, ProductsStore, Result};
 use actix_web::{delete, get, http::header::ContentType, post, web, HttpResponse, Responder};
 use async_std::sync::Mutex;
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ mod grants {
 use tap::{Pipe, Tap};
 
 #[get("/api/products")]
-pub async fn products(store: web::Data<ProductsStore>) -> Result<impl Responder> {
+pub async fn get_products(store: web::Data<ProductsStore>) -> Result<impl Responder> {
     Ok(store
         .products()
         .await?
@@ -33,7 +33,7 @@ pub async fn one_product(
 }
 
 #[post("/api/freezers/{freezer}/put-in")]
-#[grants::any(type = "Role", "Role::Moder")]
+#[grants::any(type = "Role", "Role::Moder", "Role::Admin")]
 pub async fn put_in(
     freezer: web::Path<String>,
     web::Json(prods): web::Json<HashMap<String, usize>>,
@@ -56,7 +56,7 @@ pub async fn put_in(
 }
 
 #[post("/api/freezers/{freezer}/put-out")]
-#[grants::any(type = "Role", "Role::Moder")]
+#[grants::any(type = "Role", "Role::Moder", "Role::Admin")]
 pub async fn put_out(
     freezer: web::Path<String>,
     web::Json(prods): web::Json<HashMap<String, usize>>,
@@ -75,7 +75,7 @@ pub async fn put_out(
 }
 
 #[post("/api/freezers/{freezer}/remove")]
-#[grants::any(type = "Role", "Role::Moder")]
+#[grants::any(type = "Role", "Role::Moder", "Role::Admin")]
 pub async fn remove_product(
     freezer: web::Path<String>,
     product: String,
@@ -92,7 +92,7 @@ pub async fn remove_product(
 }
 
 #[get("/api/freezers")]
-pub async fn freezers(store: web::Data<FreezersStore>) -> Result<impl Responder> {
+pub async fn get_freezers(store: web::Data<FreezersStore>) -> Result<impl Responder> {
     Ok(store
         .freezers()
         .await?
@@ -148,7 +148,7 @@ pub async fn post_image(
 }
 
 #[delete("/api/freezers/{freezer}/image")]
-#[grants::any(type = "Role", "Role::Moder")]
+#[grants::any(type = "Role", "Role::Moder", "Role::Admin")]
 pub async fn remove_image(
     freezer: web::Path<String>,
     store: web::Data<Mutex<ImageStore>>,
@@ -156,6 +156,28 @@ pub async fn remove_image(
     let id = freezer.into_inner();
 
     store.lock().await.remove(id.as_bytes()).await?;
+
+    Ok(HttpResponse::Ok())
+}
+
+#[post("/api/stored_procedure")]
+#[grants::any(type = "Role", "Role::Admin")]
+pub async fn stored_procedure(
+    store: web::Data<FreezersStore>,
+    products: web::Data<ProductsStore>,
+) -> Result<impl Responder> {
+    let mut pack = Vec::new();
+    let mut freezers = store.freezers().await?;
+    while let Some(mut freezer) = TryStreamExt::try_next(&mut freezers).await? {
+        for (name, amount) in &mut freezer.products {
+            *amount = products.product(&name).await?.default;
+        }
+        pack.push(freezer);
+    }
+
+    for freezer in pack {
+        let _ = store.update(&freezer.name.clone(), freezer).await?;
+    }
 
     Ok(HttpResponse::Ok())
 }
