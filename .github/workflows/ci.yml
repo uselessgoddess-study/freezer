@@ -1,0 +1,21 @@
+name: CI
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+# todo: add support for docker-compose
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Rustup nightly
+        run: rustup toolchain install nightly
+      - name: Build
+        run: cargo +nightly build --verbose
+      - name: Run tests
+        run: cargo +nightly test --verbose
