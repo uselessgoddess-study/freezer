@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+
+  mongodb:
+    image: mongo:5
+    container_name: mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: $MONGO_USERNAME
+      MONGO_INITDB_ROOT_PASSWORD: $MONGO_PASSWORD
+      MONGO_INITDB_DATABASE: catalog
+    ports:
+      - '27017:27017'
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: always
+    ports:
+      - '6379:6379'
