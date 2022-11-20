@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     let products =
         ProductsStore::new(mongo.database("admin").collection("products")).pipe(web::Data::new);
 
-    info!("bind to: http://localhost:8080");
+    info!("bind to: http://localhost:1228");
 
     HttpServer::new(move || {
         App::new()
@@ -67,12 +67,14 @@ async fn main() -> Result<()> {
             )
             .service(handlers::get_freezers)
             .service(handlers::one_freezer)
+            .service(handlers::update_freezer)
+            .service(handlers::remove_freezer)
             //
             .service(handlers::get_products)
             .service(handlers::one_product)
+            .service(handlers::remove_product)
             .service(handlers::put_in)
             .service(handlers::put_out)
-            .service(handlers::remove_product)
             //
             .service(handlers::image)
             .service(handlers::post_image)
@@ -89,7 +91,7 @@ async fn main() -> Result<()> {
             .app_data(freezers.clone())
             .app_data(products.clone())
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("127.0.0.1", 1228))?
     .run()
     .await
     .map_err(Into::into)

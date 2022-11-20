@@ -1,4 +1,5 @@
 use crate::{model::Freezer, Result};
+use bson::bson;
 use futures::{Stream, StreamExt};
 use mongodb::bson::{doc, Document};
 
@@ -6,7 +7,7 @@ use crate::{
     errors::{not_found, Error},
     model::Product,
 };
-use mongodb::Collection;
+use mongodb::{options::FindOptions, results::DeleteResult, Collection};
 
 fn acquire_err<T, E: Into<Error>>(place: Result<T, E>) -> Result<T> {
     place.map_err(Into::into)
@@ -39,6 +40,10 @@ impl ProductsStore {
 
 pub struct FreezersStore(Collection<Freezer>);
 
+fn into_id(freezer: Result<Freezer>) -> Result<String> {
+    freezer.map(|freezer| freezer.name)
+}
+
 impl FreezersStore {
     pub fn new(collection: Collection<Freezer>) -> Self {
         Self(collection)
@@ -46,6 +51,27 @@ impl FreezersStore {
 
     pub async fn freezers(&self) -> Result<impl Stream<Item = Result<Freezer>>> {
         Ok(self.0.find(None, None).await?.map(acquire_err))
+    }
+
+    pub async fn freezers_list(&self) -> Result<impl Stream<Item = Result<String>>> {
+        Ok(self.0.find(None, None).await?.map(acquire_err).map(into_id))
+    }
+
+    pub async fn freezers_list_by(
+        &self,
+        limit: impl Into<Option<usize>>,
+        offset: impl Into<Option<usize>>,
+    ) -> Result<impl Stream<Item = Result<String>>> {
+        let options = FindOptions::builder()
+            .limit(limit.into().map(|t| t as i64))
+            .skip(offset.into().map(|t| t as u64))
+            .build();
+        Ok(self
+            .0
+            .find(None, options)
+            .await?
+            .map(acquire_err)
+            .map(into_id))
     }
 
     pub async fn freezer_by_doc(&self, bson: Document) -> Result<Freezer> {
@@ -83,5 +109,17 @@ impl FreezersStore {
             freezer,
         )
         .await
+    }
+
+    pub async fn remove_by_doc(&self, bson: Document) -> Result<DeleteResult> {
+        self.0.delete_one(bson, None).await.map_err(Into::into)
+    }
+
+    pub async fn remove(&self, name: &str) -> Result<()> {
+        self.remove_by_doc(doc! {
+            "_id": name,
+        })
+        .await
+        .map(|_| ())
     }
 }

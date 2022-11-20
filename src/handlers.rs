@@ -2,17 +2,29 @@ use crate::{auth::Role, errors::not_found, FreezersStore, ImageStore, ProductsSt
 use actix_web::{delete, get, http::header::ContentType, post, web, HttpResponse, Responder};
 use async_std::sync::Mutex;
 use futures::{StreamExt, TryStreamExt};
+use serde::{Deserialize, Serialize};
 
+use chrono::Weekday;
 use std::collections::HashMap;
 
 mod grants {
     pub use actix_web_grants::proc_macro::has_any_role as any;
 }
 
+use crate::model::Freezer;
 use tap::{Pipe, Tap};
 
+#[derive(Serialize, Deserialize)]
+pub struct LimitQuery {
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
 #[get("/api/products")]
-pub async fn get_products(store: web::Data<ProductsStore>) -> Result<impl Responder> {
+pub async fn get_products(
+    query: web::Query<LimitQuery>,
+    store: web::Data<ProductsStore>,
+) -> Result<impl Responder> {
     Ok(store
         .products()
         .await?
@@ -92,15 +104,19 @@ pub async fn remove_product(
 }
 
 #[get("/api/freezers")]
-pub async fn get_freezers(store: web::Data<FreezersStore>) -> Result<impl Responder> {
-    Ok(store
-        .freezers()
+pub async fn get_freezers(
+    query: web::Query<LimitQuery>,
+    store: web::Data<FreezersStore>,
+) -> Result<impl Responder> {
+    store
+        .freezers_list_by(query.limit, query.offset)
         .await?
         .collect::<Vec<_>>()
         .await
         .into_iter()
         .collect::<Result<Vec<_>>>()?
-        .pipe(web::Json))
+        .pipe(web::Json)
+        .pipe(Ok)
 }
 
 #[get("/api/freezers/{freezer}")]
@@ -110,6 +126,29 @@ pub async fn one_freezer(
 ) -> Result<impl Responder> {
     let id = freezer.into_inner();
     store.freezer(&id).await.map(web::Json)
+}
+
+#[post("/api/freezers/update")]
+#[grants::any(type = "Role", "Role::Moder", "Role::Admin")]
+pub async fn update_freezer(
+    freezer: web::Json<Freezer>,
+    store: web::Data<FreezersStore>,
+) -> Result<impl Responder> {
+    let freezer = freezer.into_inner();
+    store
+        .update(&freezer.name.clone(), freezer)
+        .await
+        .map(web::Json)
+}
+
+#[delete("/api/freezers{freezer}")]
+#[grants::any(type = "Role", "Role::Admin")]
+pub async fn remove_freezer(
+    freezer: web::Path<String>,
+    store: web::Data<FreezersStore>,
+) -> Result<impl Responder> {
+    let id = freezer.into_inner();
+    store.remove(&id).await.map(web::Json)
 }
 
 #[get("/api/freezers/{freezer}/image")]
