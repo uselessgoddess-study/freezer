@@ -141,7 +141,7 @@ pub async fn update_freezer(
         .map(web::Json)
 }
 
-#[delete("/api/freezers{freezer}")]
+#[delete("/api/freezers/{freezer}")]
 #[grants::any(type = "Role", "Role::Admin")]
 pub async fn remove_freezer(
     freezer: web::Path<String>,
