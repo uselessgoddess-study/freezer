@@ -9,7 +9,7 @@ use json::json;
 use tap::pipe::Pipe;
 
 #[actix_web::test]
-async fn test_index_get() {
+async fn basic() {
     let app = test::init_service(
         App::new()
             .wrap(IdentityMiddleware::default())
