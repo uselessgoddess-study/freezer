@@ -1,5 +1,5 @@
 use crate::{model::Freezer, Result};
-use bson::bson;
+
 use futures::{Stream, StreamExt};
 use mongodb::bson::{doc, Document};
 
