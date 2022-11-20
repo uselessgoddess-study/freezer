@@ -40,7 +40,7 @@ Elfe, gelt, du hast genug?
 "#
 .as_bytes();
 
-#[derive(PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 #[repr(usize)]
 pub enum Role {
     Admin,
@@ -53,10 +53,10 @@ pub struct AuthData {
     pub login: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlimUser {
-    login: String,
-    role: Role,
+    pub login: String,
+    pub role: Role,
 }
 
 pub type LoggedUser = SlimUser;

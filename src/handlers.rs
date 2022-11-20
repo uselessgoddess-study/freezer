@@ -1,17 +1,20 @@
-use crate::{auth::Role, errors::not_found, FreezersStore, ImageStore, ProductsStore, Result};
+use crate::{auth::Role, errors::not_found, Result};
 use actix_web::{delete, get, http::header::ContentType, post, web, HttpResponse, Responder};
 use async_std::sync::Mutex;
 use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 
-use chrono::Weekday;
+
 use std::collections::HashMap;
 
 mod grants {
     pub use actix_web_grants::proc_macro::has_any_role as any;
 }
 
-use crate::model::Freezer;
+use crate::{
+    model::Freezer,
+    service::{FreezersStore, ImageStore, ProductsStore},
+};
 use tap::{Pipe, Tap};
 
 #[derive(Serialize, Deserialize)]
@@ -22,7 +25,7 @@ pub struct LimitQuery {
 
 #[get("/api/products")]
 pub async fn get_products(
-    query: web::Query<LimitQuery>,
+    _query: web::Query<LimitQuery>,
     store: web::Data<ProductsStore>,
 ) -> Result<impl Responder> {
     Ok(store

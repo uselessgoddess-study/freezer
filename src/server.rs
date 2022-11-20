@@ -1,25 +1,14 @@
-#![feature(decl_macro)]
-#![feature(poll_ready)]
-#![feature(try_blocks)]
-#![deny(clippy::all, clippy::perf)]
-
-mod auth;
-mod errors;
-mod handlers;
-mod model;
-mod service;
-mod utils;
-
-pub(crate) use errors::Result;
-
-use crate::service::{FreezersStore, ImageStore, ProductsStore};
-use actix_web::{web, App, HttpServer};
-use async_std::sync::Mutex;
+use freezer::{
+    auth, handlers,
+    service::{FreezersStore, ImageStore, ProductsStore},
+    Result,
+};
 
 use actix_identity::IdentityMiddleware;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
-use actix_web::cookie::Key;
+use actix_web::{cookie::Key, web, App, HttpServer};
 use actix_web_grants::GrantsMiddleware;
+use async_std::sync::Mutex;
 
 use std::env;
 use tap::Pipe;
