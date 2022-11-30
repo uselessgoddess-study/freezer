@@ -1,0 +1,142 @@
+#!/usr/bin/env rust-script
+//! ```cargo
+//! todo!!!
+//! ```
+
+use fake::{
+    faker::{company::en as company, internet::en as internet, name::en as name},
+    Fake,
+};
+use freezer::{
+    model::{Freezer, Model, Product},
+    service::{FreezersStore, ProductsStore},
+};
+use json::json;
+use mongodb::Collection;
+use std::{collections::HashMap, env};
+use tap::Pipe;
+
+const PRODUCTS: [(&str, usize); 6] = [
+    ("dumplings", 25),
+    ("ice", 20),
+    ("icecream", 1),
+    ("mapo-tofu", 7),
+    ("minced meat", 4),
+    ("chicken", 2),
+];
+
+fn model() -> Model {
+    Model {
+        name: company::Buzzword().fake(),
+        year: (1970..2022).fake(),
+    }
+}
+
+fn from_pair((name, default): (&str, usize)) -> Product {
+    Product {
+        name: name.to_string(),
+        default,
+    }
+}
+
+fn product() -> Product {
+    PRODUCTS[(0..6).fake::<usize>()].pipe(from_pair)
+}
+
+fn freezer() -> Freezer {
+    Freezer {
+        name: company::CompanyName().fake(),
+        model: model(),
+        owner: name::Name().fake(),
+        products: (0..(0..10).fake())
+            .map(|_| product())
+            .map(|Product { name, default }| (name, default))
+            .collect(),
+    }
+}
+
+#[actix_web::main]
+async fn main() -> anyhow::Result<()> {
+    dotenv::from_filename(".env.local").ok();
+
+    let mongo = env::var("MONGO_URI").expect("`MONGO_URI` env var should be specified");
+
+    let mongo = mongodb::Client::with_uri_str(dbg!(mongo)).await?;
+
+    let freezers: Collection<Freezer> = mongo.database("admin").collection("freezers");
+    let products: Collection<Product> = mongo.database("admin").collection("products");
+
+    products
+        .insert_many(PRODUCTS.iter().cloned().map(from_pair), None)
+        .await?;
+
+    let basic: Vec<Freezer> = json::from_value(json!(
+        [
+            {
+        "_id": "ATLANT М 7184-003",
+        "owner": "ИП Серегин",
+        "products": {
+            "ice": 5,
+        },
+        "model": {
+            "name": "Frier",
+            "year": 2012
+        }
+        },
+        {
+            "_id": "Samsung SM93924H3",
+            "owner": "ИП Борис",
+            "products": {
+                "minced meat": 220,
+                "icecream": 1,
+            },
+            "model": {
+                "name": "Monster",
+                "year": 2020
+            }
+        },
+        {
+            "_id": "Horizont M2",
+            "owner": "МС Спринг",
+            "products": {
+                "dumplings": 23
+            },
+            "model": {
+                "name": "Lol",
+                "year": 2010
+            }
+        },
+        {
+            "_id": "ATLANT М3223-R",
+            "owner": "Кор",
+            "products": {},
+            "model": {
+                "name": "Rider",
+                "year": 2011
+            }
+        },
+        {
+            "_id": "Panasonic ultra cool",
+            "owner": "ИП Борис",
+            "products": {
+                "ice": 1,
+                "chicken": 2,
+                "mapo-tofu": 4,
+            },
+            "model": {
+                "name": "Cooler Master",
+                "year": 2022
+            }
+        }
+        ]
+    ))?;
+
+    freezers.insert_many(basic.into_iter(), None).await?;
+
+    for _ in 0..100 {
+        // may duplicates
+        let _ = freezers.insert_one(freezer(), None).await;
+    }
+
+    Ok(())
+}
